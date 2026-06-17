@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a0a1a">
+    <meta name="description" content="Fire & Gas Guard - Dashboard giám sát cháy gas real-time">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+    <title>🔥 Fire & Gas Guard Dashboard</title>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <style>
+        /* ==================== CSS VARIABLES (DARK THEME) ==================== */
+        :root {
+            --bg-primary: #0a0a1a;
+            --bg-secondary: #12122a;
+            --bg-card: #1a1a3e;
+            --bg-card-hover: #222255;
+            --text-primary: #e8e8f0;
+            --text-secondary: #8888aa;
+            --text-muted: #555577;
+            --accent-fire: #e94560;
+            --accent-gas: #f5a623;
+            --accent-safe: #00d4aa;
+            --accent-blue: #4a9eff;
+            --accent-purple: #8b5cf6;
+            --border-color: #2a2a55;
+            --shadow-color: rgba(0, 0, 0, 0.4);
+            --gradient-fire: linear-gradient(135deg, #e94560, #ff6b6b);
+            --gradient-gas: linear-gradient(135deg, #f5a623, #ffd93d);
+            --gradient-safe: linear-gradient(135deg, #00d4aa, #00f5c4);
+            --gradient-blue: linear-gradient(135deg, #4a9eff, #6bb5ff);
+            --radius: 12px;
+            --radius-lg: 16px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* ==================== RESET & BASE ==================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* ==================== HEADER ==================== */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo {
+            font-size: 28px;
+            animation: fireGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes fireGlow {
+
+            0%,
+            100% {
+                filter: brightness(1);
+            }
+
+            50% {
+                filter: brightness(1.3) drop-shadow(0 0 8px #e94560);
+            }
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            background: var(--gradient-fire);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        /* ==================== BADGES ==================== */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-live {
+            background: rgba(0, 212, 170, 0.15);
+            color: var(--accent-safe);
+            border: 1px solid rgba(0, 212, 170, 0.3);
+        }
+
+        .badge-live.local {
+            background: rgba(74, 158, 255, 0.15);
+            color: var(--accent-blue);
+            border: 1px solid rgba(74, 158, 255, 0.3);
+        }
+
+        .badge-live.offline {
+            background: rgba(233, 69, 96, 0.15);
+            color: var(--accent-fire);
+            border: 1px solid rgba(233, 69, 96, 0.3);
+        }
+
+        .badge-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        /* ==================== ALERT BANNER ==================== */
+        .alert-banner {
+            display: none;
+            padding: 16px 24px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 16px;
+            animation: alertFlash 1s ease-in-out infinite;
+        }
+
+        .alert-banner.fire {
+            display: block;
+            background: linear-gradient(135deg, rgba(233, 69, 96, 0.3), rgba(233, 69, 96, 0.1));
+            color: var(--accent-fire);
+            border-bottom: 2px solid var(--accent-fire);
+        }
+
+        .alert-banner.gas {
+            display: block;
+            background: linear-gradient(135deg, rgba(245, 166, 35, 0.3), rgba(245, 166, 35, 0.1));
+            color: var(--accent-gas);
+            border-bottom: 2px solid var(--accent-gas);
+        }
+
+        @keyframes alertFlash {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.8;
+            }
+        }
+
+        /* ==================== MAIN CONTAINER ==================== */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* ==================== CONFIG PANEL ==================== */
+        .config-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            margin-bottom: 24px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: flex-end;
+        }
+
+        .config-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .config-group label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .config-group input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            padding: 10px 14px;
+            font-size: 14px;
+            width: 200px;
+            transition: var(--transition);
+        }
+
+        .config-group input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15);
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: var(--gradient-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(74, 158, 255, 0.3);
+        }
+
+        .btn-fire {
+            background: var(--gradient-fire);
+            color: white;
+        }
+
+        .btn-fire:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(233, 69, 96, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* ==================== RISK CIRCLE ==================== */
+        .risk-section {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 32px;
+        }
+
+        .risk-circle {
+            position: relative;
+            width: 180px;
+            height: 180px;
+        }
+
+        .risk-circle svg {
+            transform: rotate(-90deg);
+            width: 180px;
+            height: 180px;
+        }
+
+        .risk-circle .bg-ring {
+            fill: none;
+            stroke: var(--border-color);
+            stroke-width: 8;
+        }
+
+        .risk-circle .progress-ring {
+            fill: none;
+            stroke-width: 8;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1s ease, stroke 0.5s ease;
+        }
+
+        .risk-info {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .risk-percent {
+            font-size: 36px;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .risk-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 4px;
+        }
+
+        /* ==================== METRIC CARDS ==================== */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .metric-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+
+        .metric-card.fire::before {
+            background: var(--gradient-fire);
+        }
+
+        .metric-card.gas::before {
+            background: var(--gradient-gas);
+        }
+
+        .metric-card.fan::before {
+            background: var(--gradient-safe);
+        }
+
+        .metric-card.adc::before {
+            background: var(--gradient-blue);
+        }
+
+        .metric-card:hover {
+            background: var(--bg-card-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px var(--shadow-color);
+        }
+
+        .metric-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .metric-title {
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .metric-icon {
+            font-size: 24px;
+        }
+
+        .metric-value {
+            font-size: 40px;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .metric-value.fire-active {
+            color: var(--accent-fire);
+        }
+
+        .metric-value.gas-active {
+            color: var(--accent-gas);
+        }
+
+        .metric-value.safe {
+            color: var(--accent-safe);
+        }
+
+        .metric-value.blue {
+            color: var(--accent-blue);
+        }
+
+        .metric-sub {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-indicator.active {
+            background: rgba(233, 69, 96, 0.15);
+            color: var(--accent-fire);
+        }
+
+        .status-indicator.warning {
+            background: rgba(245, 166, 35, 0.15);
+            color: var(--accent-gas);
+        }
+
+        .status-indicator.normal {
+            background: rgba(0, 212, 170, 0.15);
+            color: var(--accent-safe);
+        }
+
+        /* ==================== CHART SECTION ==================== */
+        .chart-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 32px;
+        }
+
+        .chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 280px;
+        }
+
+        /* ==================== THRESHOLD SECTION ==================== */
+        .threshold-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 32px;
+        }
+
+        .threshold-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .threshold-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .threshold-slider {
+            flex: 1;
+            min-width: 200px;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--border-color);
+            outline: none;
+        }
+
+        .threshold-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--accent-blue);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .threshold-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 10px rgba(74, 158, 255, 0.4);
+        }
+
+        .threshold-value {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--accent-blue);
+            min-width: 60px;
+            text-align: center;
+        }
+
+        /* ==================== HISTORY TABLE ==================== */
+        .history-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 32px;
+        }
+
+        .history-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .history-table-wrapper {
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .history-table th {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            padding: 12px 16px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .history-table td {
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 14px;
+        }
+
+        .history-table tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .event-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .event-badge.fire {
+            background: rgba(233, 69, 96, 0.2);
+            color: var(--accent-fire);
+        }
+
+        .event-badge.gas {
+            background: rgba(245, 166, 35, 0.2);
+            color: var(--accent-gas);
+        }
+
+        .event-badge.fire-gas {
+            background: rgba(139, 92, 246, 0.2);
+            color: var(--accent-purple);
+        }
+
+        .event-badge.clear {
+            background: rgba(0, 212, 170, 0.2);
+            color: var(--accent-safe);
+        }
+
+        /* ==================== TOAST NOTIFICATION ==================== */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 14px 24px;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 1000;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            max-width: 400px;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success {
+            background: var(--accent-safe);
+            color: #000;
+        }
+
+        .toast.error {
+            background: var(--accent-fire);
+            color: #fff;
+        }
+
+        .toast.info {
+            background: var(--accent-blue);
+            color: #fff;
+        }
+
+        /* ==================== FOOTER ==================== */
+        .footer {
+            text-align: center;
+            padding: 24px;
+            color: var(--text-muted);
+            font-size: 12px;
+            border-top: 1px solid var(--border-color);
+            margin-top: 40px;
+        }
+
+        /* ==================== RESPONSIVE ==================== */
+        @media (max-width: 768px) {
+            .header {
+                padding: 12px 16px;
+            }
+
+            .container {
+                padding: 16px;
+            }
+
+            .config-panel {
+                flex-direction: column;
+            }
+
+            .config-group input {
+                width: 100%;
+            }
+
+            .threshold-controls {
+                flex-direction: column;
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .metric-value {
+                font-size: 32px;
+            }
+        }
+
+        /* ==================== SCROLLBAR ==================== */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3a3a66;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ==================== HEADER ==================== -->
+    <header class="header">
+        <div class="header-left">
+            <span class="logo">🔥</span>
+            <h1>Fire & Gas Guard</h1>
+        </div>
+        <div class="header-right">
+            <span id="connectionBadge" class="badge badge-live">
+                <span class="badge-dot"></span>
+                <span id="connectionText">Đang kết nối...</span>
+            </span>
+            <span id="timeDisplay" style="font-size: 13px; color: var(--text-secondary);"></span>
+        </div>
+    </header>
+
+    <!-- ==================== ALERT BANNER ==================== -->
+    <div id="alertBanner" class="alert-banner"></div>
+
+    <!-- ==================== MAIN CONTENT ==================== -->
+    <main class="container">
+
+        <!-- CONFIG PANEL: IP ESP32 -->
+        <div class="config-panel">
+            <div class="config-group">
+                <label>🌐 Địa chỉ IP ESP32 (LAN)</label>
+                <input type="text" id="esp32IpInput" placeholder="192.168.1.x" />
+            </div>
+            <button class="btn btn-primary" onclick="saveEsp32IP()">💾 Lưu IP</button>
+            <div style="flex: 1;"></div>
+            <div class="config-group">
+                <label>📊 Nguồn dữ liệu</label>
+                <span id="dataSource" style="font-size: 14px; color: var(--text-secondary); padding: 10px 0;">Firebase
+                    (Cloud)</span>
+            </div>
+        </div>
+
+        <!-- RISK CIRCLE -->
+        <div class="risk-section">
+            <div class="risk-circle">
+                <svg viewBox="0 0 180 180">
+                    <circle class="bg-ring" cx="90" cy="90" r="78"></circle>
+                    <circle id="riskRing" class="progress-ring" cx="90" cy="90" r="78" stroke="var(--accent-safe)"
+                        stroke-dasharray="490" stroke-dashoffset="490"></circle>
+                </svg>
+                <div class="risk-info">
+                    <div id="riskPercent" class="risk-percent" style="color: var(--accent-safe);">0%</div>
+                    <div class="risk-label">Rủi ro</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- METRIC CARDS -->
+        <div class="metrics-grid">
+            <!-- Fire Card -->
+            <div class="metric-card fire">
+                <div class="metric-header">
+                    <span class="metric-title">Lửa</span>
+                    <span class="metric-icon">🔥</span>
+                </div>
+                <div id="fireValue" class="metric-value safe">An toàn</div>
+                <div id="fireStatus" class="status-indicator normal">
+                    <span class="badge-dot"></span> Không phát hiện
+                </div>
+            </div>
+
+            <!-- Gas Card -->
+            <div class="metric-card gas">
+                <div class="metric-header">
+                    <span class="metric-title">Gas</span>
+                    <span class="metric-icon">💨</span>
+                </div>
+                <div id="gasValue" class="metric-value safe">An toàn</div>
+                <div id="gasStatus" class="status-indicator normal">
+                    <span class="badge-dot"></span> Không phát hiện
+                </div>
+            </div>
+
+            <!-- Fan Card -->
+            <div class="metric-card fan">
+                <div class="metric-header">
+                    <span class="metric-title">Quạt thông gió</span>
+                    <span class="metric-icon">🌀</span>
+                </div>
+                <div id="fanValue" class="metric-value safe">Tắt</div>
+                <div id="fanStatus" class="status-indicator normal">
+                    <span class="badge-dot"></span> Tự động
+                </div>
+            </div>
+
+            <!-- ADC Card -->
+            <div class="metric-card adc">
+                <div class="metric-header">
+                    <span class="metric-title">MQ-2 ADC</span>
+                    <span class="metric-icon">📊</span>
+                </div>
+                <div id="adcValue" class="metric-value blue">0</div>
+                <div id="adcStatus" class="metric-sub">
+                    Ngưỡng: <span id="adcThreshold">2000</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- CHART: ADC History -->
+        <div class="chart-section">
+            <div class="chart-header">
+                <span class="chart-title">📈 Lịch sử MQ-2 ADC</span>
+                <span style="font-size: 12px; color: var(--text-muted);" id="chartUpdateInfo">Cập nhật: --</span>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="adcChart"></canvas>
+            </div>
+        </div>
+
+        <!-- THRESHOLD SETTINGS -->
+        <div class="threshold-section">
+            <div class="threshold-header">
+                <span class="chart-title">⚙️ Cài đặt ngưỡng cảnh báo gas</span>
+            </div>
+            <div class="threshold-controls">
+                <input type="range" id="thresholdSlider" class="threshold-slider" min="0" max="4095" value="2000" />
+                <span id="thresholdDisplay" class="threshold-value">2000</span>
+                <button class="btn btn-fire" onclick="updateThreshold()">Cập nhật ngưỡng</button>
+            </div>
+        </div>
+
+        <!-- ACCESS URL FOR OTHER DEVICES -->
+        <div class="history-section" style="margin-bottom: 16px;">
+            <div class="history-header">
+                <span class="chart-title">📱 Truy cập từ thiết bị khác</span>
+            </div>
+            <div id="accessUrls"
+                style="background: rgba(74, 158, 255, 0.08); border: 1px solid rgba(74, 158, 255, 0.2); border-radius: 10px; padding: 14px; font-family: 'Courier New', monospace; font-size: 14px; color: var(--accent-blue); word-break: break-all; text-align: center;">
+                Đang phát hiện địa chỉ...
+            </div>
+            <div style="color: var(--text-muted); font-size: 12px; margin-top: 8px; text-align: center;">
+                ⚠️ Điện thoại/laptop phải cùng mạng WiFi với máy chủ http-server
+            </div>
+        </div>
+
+        <!-- HISTORY TABLE -->
+        <div class="history-section">
+            <div class="history-header">
+                <span class="chart-title">📋 Lịch sử sự kiện</span>
+                <button class="btn btn-primary" onclick="refreshHistory()"
+                    style="padding: 8px 16px; font-size: 12px;">🔄 Làm mới</button>
+            </div>
+            <div class="history-table-wrapper">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Thời gian</th>
+                            <th>Sự kiện</th>
+                            <th>Chi tiết</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody">
+                        <tr>
+                            <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                                Chưa có sự kiện
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        🔥 Fire & Gas Guard — Hệ thống giám sát cháy gas ESP32 | IoT Project 2024
+    </footer>
+
+    <!-- TOAST -->
+    <div id="toast" class="toast"></div>
+
+    <!-- ==================== JAVASCRIPT ==================== -->
+    <script>
+        // ======================== CAU HINH FIREBASE ========================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBMbc9IRCsJgtBepcE3SyQmgah6NRz4_PM",
+            authDomain: "fire-guard-001.firebaseapp.com",
+            databaseURL: "https://fire-guard-001-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "fire-guard-001",
+            storageBucket: "fire-guard-001.appspot.com",
+            messagingSenderId: "730906913696",
+            appId: "1:730906913696:web:0744783227119f6a6a12c5"
+        };
+
+        // ======================== BIEN TRANG THAI ========================
+        let currentData = {
+            fire: false,
+            gas: false,
+            fan: false,
+            adc: 0,
+            threshold: 2000,
+            timestamp: 0
+        };
+
+        let dataSource = 'firebase';  // 'firebase' hoac 'local'
+        let lastFirebaseUpdate = 0;
+        let esp32IP = '';
+        let adcHistory = [];       // [{time, value}]
+        let eventHistory = [];     // [{timestamp, event, status}]
+        let chart = null;
+        let localPollInterval = null;
+        const FIREBASE_TIMEOUT = 8000; // 8s khong co update -> chuyen local
+
+        // ======================== KHOI TAO ========================
+        document.addEventListener('DOMContentLoaded', () => {
+            // Phuc hoi IP ESP32 tu localStorage
+            esp32IP = localStorage.getItem('esp32_ip') || '';
+            document.getElementById('esp32IpInput').value = esp32IP;
+
+            // Khoi tao chart
+            initChart();
+
+            // Khoi tao Firebase
+            initFirebase();
+
+            // Cap nhat dong ho
+            setInterval(updateClock, 1000);
+            updateClock();
+
+            // Kiem tra timeout Firebase de chuyen local
+            setInterval(checkFirebaseTimeout, 1000);
+
+            // Slider event
+            document.getElementById('thresholdSlider').addEventListener('input', (e) => {
+                document.getElementById('thresholdDisplay').textContent = e.target.value;
+            });
+
+            // PWA: dang ky service worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('SW registered:', reg.scope))
+                    .catch(err => console.log('SW registration failed:', err));
+            }
+
+            // Hien thi dia chi truy cap cho thiet bi khac
+            showAccessUrls();
+        });
+
+        // ======================== FIREBASE INIT ========================
+        function initFirebase() {
+            try {
+                firebase.initializeApp(firebaseConfig);
+                const db = firebase.database();
+
+                // Lang nghe trang thai real-time
+                db.ref('FireGuard/status').on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        lastFirebaseUpdate = Date.now();
+                        dataSource = 'firebase';
+                        stopLocalPolling();
+                        updateDashboard(data);
+                    }
+                }, (error) => {
+                    console.warn('Firebase listen error:', error);
+                    switchToLocalMode();
+                });
+
+                // Lang nghe nguong tu Firebase (dong bo 2 chieu)
+                db.ref('FireGuard/config/threshold').on('value', (snapshot) => {
+                    const val = snapshot.val();
+                    if (val !== null && val >= 0 && val <= 4095) {
+                        currentData.threshold = val;
+                        document.getElementById('thresholdSlider').value = val;
+                        document.getElementById('thresholdDisplay').textContent = val;
+                        document.getElementById('adcThreshold').textContent = val;
+                    }
+                });
+
+                // Lang nghe lich su su kien
+                db.ref('FireGuard/logs').orderByChild('timestamp').limitToLast(50).on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        eventHistory = Object.values(data).sort((a, b) => {
+                            // Xu ly timestamp la chuoi hoac so
+                            const ta = typeof a.timestamp === 'string' ? a.timestamp : String(a.timestamp);
+                            const tb = typeof b.timestamp === 'string' ? b.timestamp : String(b.timestamp);
+                            return tb.localeCompare(ta);
+                        });
+                        renderHistory();
+                    }
+                });
+
+                // Lang nghe lich su ADC
+                db.ref('FireGuard/adc_history').orderByChild('timestamp').limitToLast(60).on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        const arr = Object.values(data).sort((a, b) => {
+                            const ta = typeof a.timestamp === 'string' ? a.timestamp : String(a.timestamp);
+                            const tb = typeof b.timestamp === 'string' ? b.timestamp : String(b.timestamp);
+                            return ta.localeCompare(tb);
+                        });
+                        adcHistory = arr.map(item => ({
+                            time: formatTimestamp(item.timestamp),
+                            value: item.value
+                        }));
+                        updateChart();
+                    }
+                });
+
+                console.log('Firebase initialized successfully');
+            } catch (error) {
+                console.error('Firebase init error:', error);
+                switchToLocalMode();
+            }
+        }
+
+        // ======================== CHECK FIREBASE TIMEOUT ========================
+        function checkFirebaseTimeout() {
+            if (lastFirebaseUpdate > 0 && (Date.now() - lastFirebaseUpdate) > FIREBASE_TIMEOUT) {
+                switchToLocalMode();
+            }
+        }
+
+        // ======================== LOCAL MODE ========================
+        function switchToLocalMode() {
+            if (dataSource === 'local') return; // Da o local mode
+
+            if (!esp32IP) {
+                dataSource = 'none';
+                updateConnectionBadge();
+                return;
+            }
+
+            dataSource = 'local';
+            updateConnectionBadge();
+            startLocalPolling();
+            showToast('Đã chuyển sang chế độ Local (LAN)', 'info');
+        }
+
+        function startLocalPolling() {
+            if (localPollInterval) return;
+            fetchLocalStatus(); // Fetch ngay
+            localPollInterval = setInterval(fetchLocalStatus, 2000);
+        }
+
+        function stopLocalPolling() {
+            if (localPollInterval) {
+                clearInterval(localPollInterval);
+                localPollInterval = null;
+            }
+        }
+
+        async function fetchLocalStatus() {
+            if (!esp32IP) return;
+            try {
+                const resp = await fetch(`http://${esp32IP}/api/status`, {
+                    signal: AbortSignal.timeout(3000)
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    updateDashboard(data);
+                }
+            } catch (e) {
+                console.warn('Local fetch error:', e.message);
+            }
+        }
+
+        async function fetchLocalHistory() {
+            if (!esp32IP) return;
+            try {
+                const resp = await fetch(`http://${esp32IP}/api/history`, {
+                    signal: AbortSignal.timeout(3000)
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (Array.isArray(data)) {
+                        eventHistory = data.sort((a, b) => b.timestamp - a.timestamp);
+                        renderHistory();
+                    }
+                }
+            } catch (e) {
+                console.warn('Local history fetch error:', e.message);
+            }
+        }
+
+        // ======================== CAP NHAT DASHBOARD ========================
+        function updateDashboard(data) {
+            if (!data) return;
+
+            currentData = { ...currentData, ...data };
+
+            // Fire
+            const fireVal = document.getElementById('fireValue');
+            const fireStatus = document.getElementById('fireStatus');
+            if (data.fire) {
+                fireVal.textContent = '⚠️ NGUY HIỂM';
+                fireVal.className = 'metric-value fire-active';
+                fireStatus.className = 'status-indicator active';
+                fireStatus.innerHTML = '<span class="badge-dot"></span> Phát hiện lửa!';
+            } else {
+                fireVal.textContent = 'An toàn';
+                fireVal.className = 'metric-value safe';
+                fireStatus.className = 'status-indicator normal';
+                fireStatus.innerHTML = '<span class="badge-dot"></span> Không phát hiện';
+            }
+
+            // Gas
+            const gasVal = document.getElementById('gasValue');
+            const gasStatus = document.getElementById('gasStatus');
+            if (data.gas) {
+                gasVal.textContent = '⚠️ CÓ GAS';
+                gasVal.className = 'metric-value gas-active';
+                gasStatus.className = 'status-indicator warning';
+                gasStatus.innerHTML = '<span class="badge-dot"></span> Phát hiện gas!';
+            } else {
+                gasVal.textContent = 'An toàn';
+                gasVal.className = 'metric-value safe';
+                gasStatus.className = 'status-indicator normal';
+                gasStatus.innerHTML = '<span class="badge-dot"></span> Không phát hiện';
+            }
+
+            // Fan
+            const fanVal = document.getElementById('fanValue');
+            const fanStatus = document.getElementById('fanStatus');
+            if (data.fan) {
+                fanVal.textContent = 'Bật';
+                fanVal.className = 'metric-value blue';
+                fanStatus.className = 'status-indicator active';
+                fanStatus.style.background = 'rgba(74, 158, 255, 0.15)';
+                fanStatus.style.color = 'var(--accent-blue)';
+                fanStatus.innerHTML = '<span class="badge-dot"></span> Đang chạy';
+            } else {
+                fanVal.textContent = 'Tắt';
+                fanVal.className = 'metric-value safe';
+                fanStatus.className = 'status-indicator normal';
+                fanStatus.innerHTML = '<span class="badge-dot"></span> Tự động';
+            }
+
+            // ADC
+            const adcVal = document.getElementById('adcValue');
+            const adc = data.adc || 0;
+            adcVal.textContent = adc;
+            if (adc > (data.threshold || 2000)) {
+                adcVal.className = 'metric-value fire-active';
+            } else if (adc > (data.threshold || 2000) * 0.7) {
+                adcVal.className = 'metric-value gas-active';
+            } else {
+                adcVal.className = 'metric-value blue';
+            }
+
+            // Threshold
+            if (data.threshold !== undefined) {
+                document.getElementById('adcThreshold').textContent = data.threshold;
+                document.getElementById('thresholdSlider').value = data.threshold;
+                document.getElementById('thresholdDisplay').textContent = data.threshold;
+            }
+
+            // Risk circle
+            updateRiskCircle(data);
+
+            // Alert banner
+            updateAlertBanner(data);
+
+            // Connection badge
+            updateConnectionBadge();
+
+            // Them vao lich su ADC cho chart (tu status data)
+            if (adc > 0) {
+                const timeLabel = new Date().toLocaleTimeString('vi-VN');
+                adcHistory.push({ time: timeLabel, value: adc });
+                if (adcHistory.length > 60) adcHistory.shift();
+                updateChart();
+            }
+
+            document.getElementById('chartUpdateInfo').textContent =
+                'Cập nhật: ' + new Date().toLocaleTimeString('vi-VN');
+        }
+
+        // ======================== RISK CIRCLE ========================
+        function updateRiskCircle(data) {
+            const ring = document.getElementById('riskRing');
+            const percentEl = document.getElementById('riskPercent');
+
+            let risk = 0;
+            const threshold = data.threshold || 2000;
+
+            // Tinh toan risk %
+            if (data.fire && data.gas) {
+                risk = 100;
+            } else if (data.fire) {
+                risk = 85;
+            } else if (data.gas) {
+                // Risk tang theo ADC
+                risk = Math.min(70, Math.round((data.adc / threshold) * 50));
+                risk = Math.max(risk, 30);
+            } else {
+                // Risk thap dua tren ADC
+                risk = Math.round((data.adc / threshold) * 20);
+            }
+
+            risk = Math.min(100, Math.max(0, risk));
+
+            // Cap nhat ring
+            const circumference = 2 * Math.PI * 78; // ~490
+            const offset = circumference - (risk / 100) * circumference;
+            ring.style.strokeDashoffset = offset;
+
+            let color;
+            if (risk > 70) color = 'var(--accent-fire)';
+            else if (risk > 40) color = 'var(--accent-gas)';
+            else color = 'var(--accent-safe)';
+
+            ring.style.stroke = color;
+            percentEl.textContent = risk + '%';
+            percentEl.style.color = color;
+        }
+
+        // ======================== ALERT BANNER ========================
+        function updateAlertBanner(data) {
+            const banner = document.getElementById('alertBanner');
+            if (data.fire && data.gas) {
+                banner.className = 'alert-banner fire';
+                banner.innerHTML = '🔥💨 CẢNH BÁO: PHÁT HIỆN CẢ LỬA VÀ GAS! HỆ THỐNG ĐANG XỬ LÝ...';
+            } else if (data.fire) {
+                banner.className = 'alert-banner fire';
+                banner.innerHTML = '🔥 CẢNH BÁO LỬA! Flame sensor đã kích hoạt!';
+            } else if (data.gas) {
+                banner.className = 'alert-banner gas';
+                banner.innerHTML = '💨 CẢNH BÁO GAS! Nồng độ gas vượt ngưỡng an toàn!';
+            } else {
+                banner.className = 'alert-banner';
+            }
+        }
+
+        // ======================== CONNECTION BADGE ========================
+        function updateConnectionBadge() {
+            const badge = document.getElementById('connectionBadge');
+            const text = document.getElementById('connectionText');
+            const sourceEl = document.getElementById('dataSource');
+
+            if (dataSource === 'firebase') {
+                badge.className = 'badge badge-live';
+                text.textContent = 'Live (Cloud)';
+                sourceEl.textContent = 'Firebase (Cloud)';
+            } else if (dataSource === 'local') {
+                badge.className = 'badge badge-live local';
+                text.textContent = 'Đang dùng kết nối Local (LAN)';
+                sourceEl.textContent = 'Local API (' + esp32IP + ')';
+            } else {
+                badge.className = 'badge badge-live offline';
+                text.textContent = 'Mất kết nối';
+                sourceEl.textContent = 'Không có kết nối';
+            }
+        }
+
+        // ======================== CHART ========================
+        function initChart() {
+            const ctx = document.getElementById('adcChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'MQ-2 ADC',
+                        data: [],
+                        borderColor: '#4a9eff',
+                        backgroundColor: 'rgba(74, 158, 255, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 5
+                    }, {
+                        label: 'Ngưỡng cảnh báo',
+                        data: [],
+                        borderColor: '#e94560',
+                        borderWidth: 2,
+                        borderDash: [8, 4],
+                        fill: false,
+                        pointRadius: 0,
+                        pointHoverRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 300 },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#8888aa',
+                                font: { size: 12 }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#1a1a3e',
+                            titleColor: '#e8e8f0',
+                            bodyColor: '#e8e8f0',
+                            borderColor: '#2a2a55',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: {
+                                color: '#555577',
+                                maxTicksLimit: 10,
+                                font: { size: 11 }
+                            }
+                        },
+                        y: {
+                            min: 0,
+                            max: 4095,
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: {
+                                color: '#555577',
+                                font: { size: 11 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateChart() {
+            if (!chart) return;
+
+            const labels = adcHistory.map(item => item.time);
+            const values = adcHistory.map(item => item.value);
+            const thresholdVal = currentData.threshold || 2000;
+
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = values;
+            chart.data.datasets[1].data = new Array(values.length).fill(thresholdVal);
+            chart.update('none');
+        }
+
+        // ======================== HISTORY ========================
+        function renderHistory() {
+            const tbody = document.getElementById('historyBody');
+            if (eventHistory.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:30px;">Chưa có sự kiện</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = eventHistory.slice(0, 50).map(item => {
+                const time = formatTimestamp(item.timestamp);
+                let badgeClass = 'clear';
+                let eventName = item.event || 'UNKNOWN';
+
+                if (eventName.includes('FIRE') && eventName.includes('GAS')) badgeClass = 'fire-gas';
+                else if (eventName.includes('FIRE')) badgeClass = 'fire';
+                else if (eventName.includes('GAS')) badgeClass = 'gas';
+                else badgeClass = 'clear';
+
+                return `<tr>
+                    <td>${time}</td>
+                    <td><span class="event-badge ${badgeClass}">${eventName}</span></td>
+                    <td>${item.status || item.adc ? 'ADC: ' + (item.adc || '--') : '--'}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function refreshHistory() {
+            if (dataSource === 'firebase') {
+                // Firebase tu dong cap nhat qua listener
+                showToast('Lịch sử đã được làm mới', 'success');
+            } else if (dataSource === 'local') {
+                fetchLocalHistory();
+                showToast('Đang tải lịch sử từ ESP32...', 'info');
+            }
+        }
+
+        // ======================== THRESHOLD ========================
+        async function updateThreshold() {
+            const val = parseInt(document.getElementById('thresholdSlider').value);
+            if (isNaN(val) || val < 0 || val > 4095) {
+                showToast('Giá trị ngưỡng phải từ 0 đến 4095', 'error');
+                return;
+            }
+
+            try {
+                if (dataSource === 'firebase') {
+                    // Ghi len Firebase, ESP32 se tu cap nhat
+                    const db = firebase.database();
+                    await db.ref('FireGuard/config/threshold').set(val);
+                    showToast('Đã cập nhật ngưỡng qua Cloud: ' + val, 'success');
+                } else if (dataSource === 'local' && esp32IP) {
+                    // Goi API local
+                    const resp = await fetch(`http://${esp32IP}/api/threshold`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ threshold: val }),
+                        signal: AbortSignal.timeout(5000)
+                    });
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        showToast('Đã cập nhật ngưỡng qua LAN: ' + data.threshold, 'success');
+                    } else {
+                        showToast('Lỗi cập nhật ngưỡng', 'error');
+                    }
+                } else {
+                    showToast('Không có kết nối để cập nhật ngưỡng', 'error');
+                }
+            } catch (e) {
+                showToast('Lỗi: ' + e.message, 'error');
+            }
+        }
+
+        // ======================== IP ESP32 ========================
+        function saveEsp32IP() {
+            const ip = document.getElementById('esp32IpInput').value.trim();
+            if (!ip) {
+                showToast('Vui lòng nhập địa chỉ IP ESP32', 'error');
+                return;
+            }
+
+            // Validate IP format
+            const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+            if (!ipRegex.test(ip)) {
+                showToast('Địa chỉ IP không hợp lệ', 'error');
+                return;
+            }
+
+            // Validate moi octet 0-255
+            const parts = ip.split('.');
+            for (const part of parts) {
+                if (parseInt(part) > 255) {
+                    showToast('Địa chỉ IP không hợp lệ (mỗi phần 0-255)', 'error');
+                    return;
+                }
+            }
+
+            esp32IP = ip;
+            localStorage.setItem('esp32_ip', ip);
+            showToast('Đã lưu IP ESP32: ' + ip, 'success');
+
+            // Neu dang o local mode, khoi dong lai polling
+            if (dataSource === 'local') {
+                stopLocalPolling();
+                startLocalPolling();
+            }
+        }
+
+        // ======================== TOAST ========================
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type + ' show';
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // ======================== TIMESTAMP FORMATTER ========================
+        function formatTimestamp(ts) {
+            if (!ts) return '--';
+            // Neu ESP32 da gui timestamp la chuoi dinh dang "HH:MM:SS - DD/MM/YYYY"
+            if (typeof ts === 'string' && ts.includes(':') && ts.includes('/')) {
+                return ts;
+            }
+            // Neu timestamp la so (Unix epoch seconds)
+            const num = Number(ts);
+            if (!isNaN(num) && num > 1000000000) {
+                const d = new Date(num * 1000);
+                const pad = n => String(n).padStart(2, '0');
+                return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} - ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+            }
+            // Tra ve truc tiep neu khong phai ca 2 loai
+            return String(ts);
+        }
+
+        // ======================== ACCESS URLS ========================
+        function showAccessUrls() {
+            const el = document.getElementById('accessUrls');
+            const port = window.location.port || '80';
+            const protocol = window.location.protocol;
+            const host = window.location.hostname;
+
+            // Lay dia chi IP tu hostname hien tai
+            const currentUrl = protocol + '//' + host + ':' + port;
+
+            let html = '<div style="margin-bottom: 8px; font-size: 16px; font-weight: bold;">';
+            html += '🌐 ' + currentUrl + '</div>';
+
+            // Hien thi cac dia chi IP co the truy cap
+            if (host === '127.0.0.1' || host === 'localhost') {
+                // Thu lay IP local tu WebRTC
+                try {
+                    const rtc = new RTCPeerConnection({ iceServers: [] });
+                    rtc.createDataChannel('');
+                    rtc.createOffer().then(offer => rtc.setLocalDescription(offer));
+                    rtc.onicecandidate = (event) => {
+                        if (event.candidate) {
+                            const candidate = event.candidate.candidate;
+                            const match = candidate.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
+                            if (match && match[1] !== '0.0.0.0' && !match[1].startsWith('127.')) {
+                                const localIP = match[1];
+                                const accessURL = protocol + '//' + localIP + ':' + port;
+                                el.innerHTML = '<div style="margin-bottom: 8px; font-size: 16px; font-weight: bold;">🌐 '
+                                    + accessURL + '</div>'
+                                    + '<div style="font-size: 12px; color: var(--text-muted);">Mở trình duyệt trên điện thoại/laptop và nhập địa chỉ trên</div>';
+                                rtc.close();
+                            }
+                        }
+                    };
+                    // Fallback neu WebRTC khong hoat dong
+                    setTimeout(() => {
+                        if (el.textContent.includes('Đang phát hiện')) {
+                            el.innerHTML = '<div style="font-size: 16px; font-weight: bold;">🌐 '
+                                + window.location.href + '</div>'
+                                + '<div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">'
+                                + 'Để truy cập từ thiết bị khác, thay <b>' + host + '</b> bằng IP WiFi của máy tính này</div>';
+                        }
+                    }, 3000);
+                } catch (e) {
+                    el.innerHTML = '<div style="font-size: 16px; font-weight: bold;">🌐 '
+                        + window.location.href + '</div>'
+                        + '<div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">'
+                        + 'Để truy cập từ thiết bị khác, thay <b>' + host + '</b> bằng IP WiFi của máy tính này</div>';
+                }
+            } else {
+                el.innerHTML = '<div style="font-size: 16px; font-weight: bold;">🌐 '
+                    + currentUrl + '</div>'
+                    + '<div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">'
+                    + 'Chia sẻ địa chỉ trên cho thiết bị khác cùng mạng WiFi</div>';
+            }
+        }
+
+        // ======================== CLOCK ========================
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('timeDisplay').textContent =
+                now.toLocaleString('vi-VN', {
+                    hour: '2-digit', minute: '2-digit', second: '2-digit',
+                    day: '2-digit', month: '2-digit', year: 'numeric'
+                });
+        }
+    </script>
+
+</body>
+
+</html>
